@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Arbeitstag</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --text: #ffffff;
+    --text-soft: rgba(255, 255, 255, 0.65);
+    --blau: #1781e3;       /* Swisscom Blau, Akzent */
+    --blau-hell: #4aa3ff;  /* hellerer Verlauf */
+    --spur: rgba(255, 255, 255, 0.15);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    background: transparent;
+    color: var(--text);
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    height: 100%;
+  }
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+  }
+  .widget {
+    width: 100%;
+    max-width: 520px;
+  }
+  .kopf {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 18px;
+    font-weight: 500;
+    margin-bottom: 14px;
+  }
+  .kopf .emoji { font-size: 22px; }
+  .kopf .ende {
+    margin-left: auto;
+    font-size: 13px;
+    color: var(--text-soft);
+    font-weight: 400;
+  }
+  .zeit {
+    display: flex;
+    align-items: flex-end;
+    gap: 6px;
+    margin-bottom: 16px;
+  }
+  .block { text-align: center; }
+  .zahl {
+    font-size: 52px;
+    font-weight: 800;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -1px;
+  }
+  .label {
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    color: var(--text-soft);
+    margin-top: 6px;
+  }
+  .doppelpunkt {
+    font-size: 44px;
+    font-weight: 700;
+    color: var(--blau);
+    line-height: 1;
+    padding-bottom: 20px;
+  }
+  .balken-zeile {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .spur {
+    flex: 1;
+    height: 10px;
+    border-radius: 999px;
+    background: var(--spur);
+    overflow: hidden;
+  }
+  .fuellung {
+    height: 100%;
+    width: 0%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--blau), var(--blau-hell));
+    transition: width 1s linear;
+  }
+  .prozent {
+    min-width: 48px;
+    text-align: right;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--blau-hell);
+  }
+  .steuerung {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 16px;
+    font-size: 13px;
+    color: var(--text-soft);
+  }
+  button {
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    border: none;
+    border-radius: 999px;
+    padding: 8px 16px;
+    cursor: pointer;
+    background: var(--blau);
+    color: #fff;
+  }
+  button.leise {
+    background: transparent;
+    color: var(--text-soft);
+    border: 1px solid var(--spur);
+  }
+  input[type="time"] {
+    font-family: inherit;
+    font-size: 13px;
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--spur);
+    border-radius: 8px;
+    padding: 5px 8px;
+    color-scheme: dark;
+  }
+  .fertig {
+    font-size: 26px;
+    font-weight: 800;
+    margin-bottom: 16px;
+  }
+  .versteckt { display: none !important; }
+</style>
+</head>
+<body>
+<div class="widget">
+  <div class="kopf">
+    <span class="emoji" id="emoji">☀️</span>
+    <span id="datum"></span>
+    <span class="ende" id="ende"></span>
+  </div>
+
+  <div class="zeit" id="zeit">
+    <div class="block"><div class="zahl" id="std">08</div><div class="label">STD</div></div>
+    <div class="doppelpunkt">:</div>
+    <div class="block"><div class="zahl" id="min">30</div><div class="label">MIN</div></div>
+    <div class="doppelpunkt">:</div>
+    <div class="block"><div class="zahl" id="sek">00</div><div class="label">SEK</div></div>
+  </div>
+  <div class="fertig versteckt" id="fertig">Feierabend! 🎉</div>
+
+  <div class="balken-zeile">
+    <div class="spur"><div class="fuellung" id="fuellung"></div></div>
+    <div class="prozent" id="prozent">0%</div>
+  </div>
+
+  <div class="steuerung">
+    <button id="startBtn">Tag starten</button>
+    <span id="startInfo" class="versteckt">Start um</span>
+    <input type="time" id="startZeit" class="versteckt" title="Startzeit anpassen">
+    <button class="leise versteckt" id="resetBtn">Zurücksetzen</button>
+  </div>
+</div>
+
+<script>
+  // Dauer in Stunden, per Link anpassbar: arbeitstag.html?stunden=8
+  const params = new URLSearchParams(location.search);
+  const STUNDEN = parseFloat(params.get("stunden")) || 8.5;
+  const DAUER_MS = STUNDEN * 60 * 60 * 1000;
+  const SPEICHER = "arbeitstag-start";
+
+  const $ = (id) => document.getElementById(id);
+  const zwei = (n) => String(n).padStart(2, "0");
+  const heuteKey = () => new Date().toDateString();
+
+  function speichern(ts) {
+    try { localStorage.setItem(SPEICHER, JSON.stringify({ tag: heuteKey(), ts })); } catch (e) {}
+  }
+  function laden() {
+    try {
+      const d = JSON.parse(localStorage.getItem(SPEICHER));
+      if (d && d.tag === heuteKey()) return d.ts; // nur heutiger Start zählt
+    } catch (e) {}
+    return null;
+  }
+  function loeschen() {
+    try { localStorage.removeItem(SPEICHER); } catch (e) {}
+  }
+
+  let start = laden();
+
+  function datumAnzeigen() {
+    const jetzt = new Date();
+    const tag = jetzt.toLocaleDateString("de-CH", { weekday: "long" });
+    const datum = jetzt.toLocaleDateString("de-CH", { day: "2-digit", month: "2-digit", year: "numeric" });
+    $("datum").textContent = tag + ", " + datum;
+  }
+
+  function emojiFuer(anteil) {
+    if (anteil >= 1) return "🌙";
+    if (anteil >= 0.75) return "🌇";
+    if (anteil >= 0.35) return "☀️";
+    return "🌅";
+  }
+
+  function aktualisieren() {
+    datumAnzeigen();
+
+    if (!start) {
+      $("std").textContent = zwei(Math.floor(STUNDEN));
+      $("min").textContent = zwei(Math.round((STUNDEN % 1) * 60));
+      $("sek").textContent = "00";
+      $("fuellung").style.width = "0%";
+      $("prozent").textContent = "0%";
+      $("ende").textContent = "";
+      $("emoji").textContent = "☀️";
+      $("startBtn").classList.remove("versteckt");
+      ["startInfo", "startZeit", "resetBtn"].forEach(id => $(id).classList.add("versteckt"));
+      $("zeit").classList.remove("versteckt");
+      $("fertig").classList.add("versteckt");
+      return;
+    }
+
+    const jetzt = Date.now();
+    const ende = start + DAUER_MS;
+    const rest = Math.max(0, ende - jetzt);
+    const anteil = Math.min(1, (jetzt - start) / DAUER_MS);
+
+    const h = Math.floor(rest / 3600000);
+    const m = Math.floor((rest % 3600000) / 60000);
+    const s = Math.floor((rest % 60000) / 1000);
+    $("std").textContent = zwei(h);
+    $("min").textContent = zwei(m);
+    $("sek").textContent = zwei(s);
+
+    $("fuellung").style.width = (anteil * 100).toFixed(2) + "%";
+    $("prozent").textContent = Math.floor(anteil * 100) + "%";
+    $("emoji").textContent = emojiFuer(anteil);
+
+    const endeZeit = new Date(ende);
+    $("ende").textContent = "Feierabend " + zwei(endeZeit.getHours()) + ":" + zwei(endeZeit.getMinutes());
+
+    const s0 = new Date(start);
+    if (document.activeElement !== $("startZeit")) {
+      $("startZeit").value = zwei(s0.getHours()) + ":" + zwei(s0.getMinutes());
+    }
+
+    $("startBtn").classList.add("versteckt");
+    ["startInfo", "startZeit", "resetBtn"].forEach(id => $(id).classList.remove("versteckt"));
+
+    const vorbei = rest === 0;
+    $("zeit").classList.toggle("versteckt", vorbei);
+    $("fertig").classList.toggle("versteckt", !vorbei);
+  }
+
+  $("startBtn").addEventListener("click", () => {
+    start = Date.now();
+    speichern(start);
+    aktualisieren();
+  });
+
+  $("resetBtn").addEventListener("click", () => {
+    start = null;
+    loeschen();
+    aktualisieren();
+  });
+
+  // Startzeit nachträglich anpassen, z.B. wenn du schon um 7:45 angefangen hast
+  $("startZeit").addEventListener("change", (e) => {
+    const [hh, mm] = e.target.value.split(":").map(Number);
+    if (isNaN(hh) || isNaN(mm)) return;
+    const d = new Date();
+    d.setHours(hh, mm, 0, 0);
+    start = d.getTime();
+    speichern(start);
+    aktualisieren();
+  });
+
+  aktualisieren();
+  setInterval(aktualisieren, 1000);
+</script>
+</body>
+</html>
